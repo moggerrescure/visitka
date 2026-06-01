@@ -11,45 +11,42 @@ const initThreeJS = () => {
   if (!canvasContainer) return;
 
   const scene = new THREE.Scene();
-  // Add a soft fog to blend the edges of the particles
   scene.fog = new THREE.FogExp2(0x0d0d12, 0.001);
 
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.z = 30;
+  camera.position.z = 40;
 
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   canvasContainer.appendChild(renderer.domElement);
 
-  // Particles
-  const particlesGeometry = new THREE.BufferGeometry();
-  const particlesCount = 1500;
-  const posArray = new Float32Array(particlesCount * 3);
-  const colorsArray = new Float32Array(particlesCount * 3);
+  // Neural Network Particles & Lines
+  const particlesCount = 400; // Reduced for performance with lines
+  const positions = new Float32Array(particlesCount * 3);
+  const velocities = [];
 
-  const color1 = new THREE.Color(0x9d4edd); // Primary purple
-  const color2 = new THREE.Color(0xff9e00); // Accent orange
+  const color1 = new THREE.Color(0x9d4edd); // Purple
+  const color2 = new THREE.Color(0xff9e00); // Orange
 
-  for(let i = 0; i < particlesCount * 3; i+=3) {
-    // Spread particles in a wide area
-    posArray[i] = (Math.random() - 0.5) * 100;
-    posArray[i+1] = (Math.random() - 0.5) * 100;
-    posArray[i+2] = (Math.random() - 0.5) * 100;
-
-    // Mix colors
-    const mixedColor = color1.clone().lerp(color2, Math.random());
-    colorsArray[i] = mixedColor.r;
-    colorsArray[i+1] = mixedColor.g;
-    colorsArray[i+2] = mixedColor.b;
+  for(let i = 0; i < particlesCount; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 80;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 80;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
+    
+    velocities.push({
+      x: (Math.random() - 0.5) * 0.05,
+      y: (Math.random() - 0.5) * 0.05,
+      z: (Math.random() - 0.5) * 0.05
+    });
   }
 
-  particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-  particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colorsArray, 3));
+  const particlesGeometry = new THREE.BufferGeometry();
+  particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
   const particlesMaterial = new THREE.PointsMaterial({
-    size: 0.15,
-    vertexColors: true,
+    size: 0.4,
+    color: 0x9d4edd,
     transparent: true,
     opacity: 0.8,
     blending: THREE.AdditiveBlending
@@ -58,13 +55,30 @@ const initThreeJS = () => {
   const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
   scene.add(particlesMesh);
 
+  // Lines
+  const linesMaterial = new THREE.LineBasicMaterial({
+    color: 0xff9e00,
+    transparent: true,
+    opacity: 0.15,
+    blending: THREE.AdditiveBlending
+  });
+  
+  const linesGeometry = new THREE.BufferGeometry();
+  const linesMesh = new THREE.LineSegments(linesGeometry, linesMaterial);
+  scene.add(linesMesh);
+
   // Mouse Interaction
   let mouseX = 0;
   let mouseY = 0;
+  let targetX = 0;
+  let targetY = 0;
+
+  const windowHalfX = window.innerWidth / 2;
+  const windowHalfY = window.innerHeight / 2;
 
   document.addEventListener('mousemove', (event) => {
-    mouseX = (event.clientX / window.innerWidth) - 0.5;
-    mouseY = (event.clientY / window.innerHeight) - 0.5;
+    mouseX = (event.clientX - windowHalfX) * 0.05;
+    mouseY = (event.clientY - windowHalfY) * 0.05;
   });
 
   // Animation Loop
@@ -72,15 +86,53 @@ const initThreeJS = () => {
 
   const tick = () => {
     const elapsedTime = clock.getElapsedTime();
-
-    // Slowly rotate the particle system
-    particlesMesh.rotation.y = elapsedTime * 0.05;
-    particlesMesh.rotation.x = elapsedTime * 0.02;
-
-    // Subtle reaction to mouse
-    camera.position.x += (mouseX * 5 - camera.position.x) * 0.05;
-    camera.position.y += (-mouseY * 5 - camera.position.y) * 0.05;
+    
+    // Smooth camera movement
+    targetX = mouseX * 0.5;
+    targetY = mouseY * 0.5;
+    camera.position.x += (targetX - camera.position.x) * 0.02;
+    camera.position.y += (-targetY - camera.position.y) * 0.02;
     camera.lookAt(scene.position);
+
+    // Update particle positions
+    const posAttribute = particlesGeometry.attributes.position;
+    for (let i = 0; i < particlesCount; i++) {
+      posAttribute.array[i * 3] += velocities[i].x;
+      posAttribute.array[i * 3 + 1] += velocities[i].y;
+      posAttribute.array[i * 3 + 2] += velocities[i].z;
+      
+      // Bounce off boundaries
+      if (Math.abs(posAttribute.array[i * 3]) > 40) velocities[i].x *= -1;
+      if (Math.abs(posAttribute.array[i * 3 + 1]) > 40) velocities[i].y *= -1;
+      if (Math.abs(posAttribute.array[i * 3 + 2]) > 40) velocities[i].z *= -1;
+    }
+    posAttribute.needsUpdate = true;
+
+    // Slowly rotate the whole network
+    particlesMesh.rotation.y = elapsedTime * 0.05;
+    linesMesh.rotation.y = elapsedTime * 0.05;
+    particlesMesh.rotation.x = elapsedTime * 0.02;
+    linesMesh.rotation.x = elapsedTime * 0.02;
+
+    // Update lines (connect nearby particles)
+    const linePositions = [];
+    for (let i = 0; i < particlesCount; i++) {
+      for (let j = i + 1; j < particlesCount; j++) {
+        const dx = posAttribute.array[i * 3] - posAttribute.array[j * 3];
+        const dy = posAttribute.array[i * 3 + 1] - posAttribute.array[j * 3 + 1];
+        const dz = posAttribute.array[i * 3 + 2] - posAttribute.array[j * 3 + 2];
+        const distSq = dx*dx + dy*dy + dz*dz;
+
+        // Connect if close enough
+        if (distSq < 150) {
+          linePositions.push(
+            posAttribute.array[i * 3], posAttribute.array[i * 3 + 1], posAttribute.array[i * 3 + 2],
+            posAttribute.array[j * 3], posAttribute.array[j * 3 + 1], posAttribute.array[j * 3 + 2]
+          );
+        }
+      }
+    }
+    linesGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
 
     renderer.render(scene, camera);
     window.requestAnimationFrame(tick);
