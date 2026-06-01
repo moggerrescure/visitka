@@ -232,7 +232,126 @@ const initGSAP = () => {
   });
 };
 
+// 3. Initialize UI Enhancements
+const initUI = () => {
+  // 3.1 Custom Cursor
+  const cursorDot = document.querySelector('.custom-cursor-dot');
+  const cursorRing = document.querySelector('.custom-cursor-ring');
+  
+  let mouseX = 0, mouseY = 0;
+  let ringX = 0, ringY = 0;
+  
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    gsap.set(cursorDot, { x: mouseX, y: mouseY });
+  });
+
+  const renderCursor = () => {
+    ringX += (mouseX - ringX) * 0.15;
+    ringY += (mouseY - ringY) * 0.15;
+    gsap.set(cursorRing, { x: ringX, y: ringY });
+    requestAnimationFrame(renderCursor);
+  };
+  renderCursor();
+
+  document.addEventListener('mousedown', () => {
+    gsap.to(cursorRing, { width: 50, height: 50, duration: 0.2, ease: 'power2.out' });
+  });
+  document.addEventListener('mouseup', () => {
+    gsap.to(cursorRing, { width: 30, height: 30, duration: 0.2, ease: 'power2.out' });
+  });
+
+  const interactives = document.querySelectorAll('a, button, .scroll-progress-container');
+  interactives.forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      gsap.to(cursorRing, { width: 50, height: 50, backgroundColor: 'rgba(255, 158, 0, 0.1)', duration: 0.2 });
+    });
+    el.addEventListener('mouseleave', () => {
+      gsap.to(cursorRing, { width: 30, height: 30, backgroundColor: 'transparent', duration: 0.2 });
+    });
+  });
+
+  // 3.2 Cyber-reveal text
+  const heroTitle = document.querySelector('.hero-title .highlight');
+  if (heroTitle) {
+    const originalText = "Workout";
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let iterations = 0;
+    const interval = setInterval(() => {
+      heroTitle.innerText = originalText.split("")
+        .map((letter, index) => {
+          if (index < iterations) {
+            return originalText[index];
+          }
+          return letters[Math.floor(Math.random() * 36)];
+        })
+        .join("");
+      
+      if (iterations >= originalText.length) {
+        clearInterval(interval);
+      }
+      iterations += 1/3;
+    }, 30);
+  }
+
+  // 3.3 Scroll Progress Ring
+  const progressBar = document.querySelector('.scroll-progress-bar');
+  const scrollContainer = document.querySelector('.scroll-progress-container');
+  
+  if (progressBar) {
+    const radius = progressBar.r.baseVal.value;
+    const circumference = radius * 2 * Math.PI;
+    progressBar.style.strokeDasharray = `${circumference} ${circumference}`;
+    progressBar.style.strokeDashoffset = circumference;
+    
+    window.addEventListener('scroll', () => {
+      const scrollPercent = window.scrollY / (document.body.scrollHeight - window.innerHeight);
+      const offset = circumference - scrollPercent * circumference;
+      progressBar.style.strokeDashoffset = offset;
+    });
+
+    scrollContainer.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  // 3.4 3D Tilt Effect for Images
+  const cards = document.querySelectorAll('.image-glass');
+  cards.forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      
+      const rotateX = ((y - centerY) / centerY) * -15;
+      const rotateY = ((x - centerX) / centerX) * 15;
+      
+      gsap.to(card, {
+        rotateX: rotateX,
+        rotateY: rotateY,
+        transformPerspective: 1000,
+        ease: 'power1.out',
+        duration: 0.5
+      });
+    });
+    
+    card.addEventListener('mouseleave', () => {
+      gsap.to(card, {
+        rotateX: 0,
+        rotateY: 0,
+        ease: 'power3.out',
+        duration: 0.5
+      });
+    });
+  });
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   initThreeJS();
   initGSAP();
+  initUI();
 });
