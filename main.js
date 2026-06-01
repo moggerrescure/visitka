@@ -37,7 +37,10 @@ const initThreeJS = () => {
     velocities.push({
       x: (Math.random() - 0.5) * 0.05,
       y: (Math.random() - 0.5) * 0.05,
-      z: (Math.random() - 0.5) * 0.05
+      z: (Math.random() - 0.5) * 0.05,
+      explodeX: 0,
+      explodeY: 0,
+      explodeZ: 0
     });
   }
 
@@ -67,7 +70,7 @@ const initThreeJS = () => {
   const linesMesh = new THREE.LineSegments(linesGeometry, linesMaterial);
   scene.add(linesMesh);
 
-  // Mouse Interaction
+  // Mouse Interaction & Shockwave
   let mouseX = 0;
   let mouseY = 0;
   let targetX = 0;
@@ -79,6 +82,40 @@ const initThreeJS = () => {
   document.addEventListener('mousemove', (event) => {
     mouseX = (event.clientX - windowHalfX) * 0.05;
     mouseY = (event.clientY - windowHalfY) * 0.05;
+  });
+
+  const raycaster = new THREE.Raycaster();
+  const mouseVec = new THREE.Vector2();
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const clickTarget = new THREE.Vector3();
+
+  window.addEventListener('click', (event) => {
+    // Normalize mouse coordinates for raycasting
+    mouseVec.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouseVec.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouseVec, camera);
+    raycaster.ray.intersectPlane(plane, clickTarget);
+
+    const posAttribute = particlesGeometry.attributes.position;
+    for (let i = 0; i < particlesCount; i++) {
+      const px = posAttribute.array[i * 3];
+      const py = posAttribute.array[i * 3 + 1];
+      const pz = posAttribute.array[i * 3 + 2];
+      
+      const dx = px - clickTarget.x;
+      const dy = py - clickTarget.y;
+      const dz = pz - clickTarget.z;
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+      
+      // If particle is near the click, apply an explosive outward force
+      if (dist < 40 && dist > 0.1) {
+        const force = (40 - dist) / 40; 
+        velocities[i].explodeX += (dx / dist) * force * 2.5;
+        velocities[i].explodeY += (dy / dist) * force * 2.5;
+        velocities[i].explodeZ += (dz / dist) * force * 2.5;
+      }
+    }
   });
 
   // Animation Loop
@@ -97,9 +134,14 @@ const initThreeJS = () => {
     // Update particle positions
     const posAttribute = particlesGeometry.attributes.position;
     for (let i = 0; i < particlesCount; i++) {
-      posAttribute.array[i * 3] += velocities[i].x;
-      posAttribute.array[i * 3 + 1] += velocities[i].y;
-      posAttribute.array[i * 3 + 2] += velocities[i].z;
+      posAttribute.array[i * 3] += velocities[i].x + velocities[i].explodeX;
+      posAttribute.array[i * 3 + 1] += velocities[i].y + velocities[i].explodeY;
+      posAttribute.array[i * 3 + 2] += velocities[i].z + velocities[i].explodeZ;
+      
+      // Apply damping to the explosive force so it slows down smoothly
+      velocities[i].explodeX *= 0.92;
+      velocities[i].explodeY *= 0.92;
+      velocities[i].explodeZ *= 0.92;
       
       // Bounce off boundaries
       if (Math.abs(posAttribute.array[i * 3]) > 40) velocities[i].x *= -1;
